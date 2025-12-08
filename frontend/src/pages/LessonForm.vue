@@ -72,6 +72,15 @@
 			<div class="">
 				<div class="sticky top-0 p-5">
 					<LessonHelp />
+					<div v-if="assistantEnabled" class="border-t mt-4 pt-4">
+						<ChatbotPanel
+							:course="courseName"
+							:chapter="chapterNumber"
+							:lesson="lessonNumber"
+							:lessonTitle="lessonDetails.data?.lesson?.title || 'New Lesson'"
+							:lessonId="lessonDetails.data?.lesson?.name"
+						/>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -97,6 +106,7 @@ import {
 import { sessionStore } from '../stores/session'
 import EditorJS from '@editorjs/editorjs'
 import LessonHelp from '@/components/LessonHelp.vue'
+import ChatbotPanel from '@/components/ChatbotPanel.vue'
 import { ChevronRight } from 'lucide-vue-next'
 import { getEditorTools, enablePlyr } from '@/utils'
 import { capture, startRecording, stopRecording } from '@/telemetry'
@@ -110,6 +120,29 @@ const openInstructorEditor = ref(false)
 const { updateOnboardingStep } = useOnboarding('learning')
 let autoSaveInterval
 let showSuccessMessage = false
+
+// Assistant feature flags from settings and per-course
+const assistantSetting = createResource({
+	url: 'lms.lms.api.get_lms_setting',
+	makeParams() {
+		return { field: 'enable_lesson_assistant' }
+	},
+	auto: true,
+})
+const courseAssistant = createResource({
+	url: 'lms.lms.api.is_assistant_enabled',
+	makeParams() {
+		return { course: props.courseName }
+	},
+	auto: true,
+})
+const assistantEnabled = computed(() => {
+	const val = assistantSetting.data
+	const global = val === 1 || val === '1' || val === true || val === 'true'
+	if (!global) return false
+	if (courseAssistant.data === false) return false
+	return true
+})
 
 const props = defineProps({
 	courseName: {
