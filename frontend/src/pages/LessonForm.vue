@@ -71,7 +71,6 @@
 			</div>
 				<div class="ai-sidebar h-full overflow-y-auto">
 					<div class="p-4 space-y-4">
-						<LessonHelp />
 						<div class="rounded-md border p-3 bg-surface-white">
 							<div class="text-sm font-semibold mb-2">{{ __('AI Assistant Index') }}</div>
 							<div
@@ -191,6 +190,7 @@
 								</div>
 							</div>
 							</div>
+						<LessonHelp />
 					</div>
 				</div>
 			</div>
