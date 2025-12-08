@@ -69,44 +69,155 @@
 					</div>
 				</div>
 			</div>
-			<div class="">
-				<div class="sticky top-0 p-5">
-					<LessonHelp />
-					<div v-if="assistantEnabled" class="border-t mt-4 pt-4">
-						<ChatbotPanel
-							:course="courseName"
-							:chapter="chapterNumber"
-							:lesson="lessonNumber"
-							:lessonTitle="lessonDetails.data?.lesson?.title || 'New Lesson'"
-							:lessonId="lessonDetails.data?.lesson?.name"
-						/>
+				<div class="ai-sidebar h-full overflow-y-auto">
+					<div class="p-4 space-y-4">
+						<LessonHelp />
+						<div class="rounded-md border p-3 bg-surface-white">
+							<div class="text-sm font-semibold mb-2">{{ __('AI Assistant Index') }}</div>
+							<div
+								v-if="user.data?.is_moderator && assistantPaused"
+								class="mb-2 text-xs bg-amber-50 text-amber-800 border border-amber-200 rounded px-2 py-1 flex items-center justify-between"
+							>
+								<span>{{ __('Assistant auto-paused due to proxy alerts') }}</span>
+								<Button size="xs" @click="clearPause">{{ __('Clear Pause') }}</Button>
+							</div>
+							<div class="text-xs text-ink-gray-6 mb-2">
+								{{ __('Total Chunks') }}: {{ ragSummary.data?.total_chunks || 0 }}<br />
+								{{ __('Attachment Chunks') }}: {{ ragSummary.data?.by_source?.File || 0 }}<br />
+								{{ __('Embedded Chunks') }}: {{ ragSummary.data?.embedded_chunks || 0 }}<br />
+								{{ __('Last Run') }}:
+								<span v-if="ragSummary.data?.last_run">{{ ragSummary.data.last_run.last_indexed_at }}</span>
+								<span v-else>—</span>
+							</div>
+						<div class="w-full h-2 bg-surface-gray-2 rounded">
+							<div
+								class="h-2 bg-brand-600 rounded"
+								:style="{ width: coveragePct + '%' }"
+							></div>
+						</div>
+						
+						<!-- Attachments Info -->
+						<div class="mt-3" v-if="attachStatus.data?.length">
+							<div class="text-xs font-medium text-ink-gray-7 mb-1">{{ __('Attachments') }}</div>
+							<div class="space-y-1 max-h-40 overflow-auto">
+								<div v-for="f in attachStatus.data" :key="f.file_url" class="flex items-center justify-between text-xs">
+									<span class="truncate" :title="f.file_name">{{ f.file_name }}</span>
+									<span class="text-ink-gray-6">{{ f.chunks }} {{ __('chunks') }}</span>
+								</div>
+							</div>
+						</div>
+						
+						<!-- Workflow Instructions -->
+						<div class="text-xs text-ink-gray-6 bg-surface-gray-1 rounded p-2 mb-2 mt-3">
+							<div class="font-medium text-ink-gray-7 mb-1">{{ __('AI Workflow') }}:</div>
+							<div class="space-y-0.5">
+								<div>{{ __('1. 📝 Index This Lesson (Required)') }}</div>
+								<div>{{ __('2. 🧠 Compute Embeddings (Optional - Requires External AI)') }}</div>
+								<div>{{ __('3. 🔄 Rebuild Index (Steps 1+2 Combined)') }}</div>
+								<div>{{ __('4. 🎯 Generate Quiz/FAQ/Summary (Optional - Requires AI)') }}</div>
+							</div>
+						</div>
+						
+						<div class="space-y-2">
+								<Button size="sm" class="w-full justify-start" @click="indexNow">{{ __('Index This Lesson') }}</Button>
+								<Button size="sm" class="w-full justify-start" @click="embedNow">{{ __('Compute Embeddings') }}</Button>
+                            <Button size="sm" class="w-full justify-start" @click="rebuildNow">{{ __('Rebuild Index') }}</Button>
+                            <Button size="sm" class="w-full justify-start" v-if="user.data?.is_moderator" @click="generateQuiz">{{ __('Generate Quiz (AI)') }}</Button>
+                            <Button size="sm" class="w-full justify-start" v-if="user.data?.is_moderator && hasLastQuizParams" @click="regenerateQuizLast">{{ __('Regenerate Quiz (Last)') }}</Button>
+                            <Button size="sm" class="w-full justify-start" v-if="user.data?.is_moderator" @click="generateDraft">{{ __('Generate Summary/Glossary') }}</Button>
+                            <Button size="sm" class="w-full justify-start" v-if="user.data?.is_moderator" @click="generateFAQ">{{ __('Generate FAQ Draft') }}</Button>
+
+							<div v-if="remainingToEmbed > 0" class="text-ink-gray-6 text-xs pt-1 break-words">
+								{{ __('Remaining') }}: {{ remainingToEmbed }}
+							</div>
+
+							<div class="rounded-md border p-4 bg-surface-white mt-2">
+								<div class="text-sm font-semibold mb-2">{{ __('Reports') }}</div>
+								<div class="text-xs space-y-1">
+									<div class="break-words">
+										<a :href="'/app/query-report/AI%20Embeddings%20Coverage'" target="_blank" class="text-brand-600 hover:underline break-words">{{ __('Open Embeddings Coverage') }}</a>
+									</div>
+									<div class="break-words">
+										<a :href="'/app/query-report/RAG%20Index%20Runs'" target="_blank" class="text-brand-600 hover:underline break-words">{{ __('Open Index Runs') }}</a>
+									</div>
+									<div class="break-words">
+										<a :href="'/app/query-report/AI%20External%20Sources%20Errors'" target="_blank" class="text-brand-600 hover:underline break-words">{{ __('Open External Errors') }}</a>
+									</div>
+									<div class="break-words">
+										<a :href="'/app/query-report/AI%20Guardrail%20Events'" target="_blank" class="text-brand-600 hover:underline break-words">{{ __('Open Guardrail Events') }}</a>
+									</div>
+								</div>
+							</div>
+						</div>
+                        <div class="mt-1 text-xs" v-if="lastLessonDraft.data?.length || lastFaqDraft.data?.length">
+                            <span class="text-ink-gray-7">{{ __('Latest Drafts') }}:</span>
+                            <template v-if="lastLessonDraft.data?.length">
+                                <div class="break-words">
+                                    <a :href="`/app/ai-lesson-draft/${lastLessonDraft.data[0].name}`" target="_blank" class="text-brand-600 hover:underline break-words">{{ __('Summary/Glossary') }}</a>
+                                </div>
+                            </template>
+                            <template v-if="lastFaqDraft.data?.length">
+                                <div class="break-words">
+                                    <a :href="`/app/ai-faq-draft/${lastFaqDraft.data[0].name}`" target="_blank" class="text-brand-600 hover:underline break-words">{{ __('FAQ') }}</a>
+                                </div>
+                            </template>
+                        </div>
+							<div class="rounded-md border p-4 bg-surface-white mt-2">
+								<div class="text-sm font-semibold mb-2">{{ __('External Sources') }}</div>
+								<div class="text-xs text-ink-gray-6 mb-2 break-words">
+									{{ __('Allowed Domains') }}: {{ externalAllowedDomains || '—' }}
+								</div>
+								<div class="space-y-1 max-h-28 overflow-auto mb-2" v-if="lessonExternalSources.length">
+									<div v-for="s in lessonExternalSources" :key="s.name" class="text-xs break-words">
+										<span class="font-medium">{{ s.title || s.url }}</span>
+										<span class="text-ink-gray-6"> — {{ s.status }}</span>
+									</div>
+								</div>
+								<div class="text-xs space-y-1">
+									<div class="space-y-1">
+										<div class="break-words">
+											<a @click.prevent="indexLessonExternalNow" class="text-brand-600 hover:underline cursor-pointer break-words">{{ __('Index External Sources') }}</a>
+										</div>
+										<div class="break-words">
+											<a :href="'/app/ai-external-source'" target="_blank" class="text-brand-600 hover:underline break-words">{{ __('Open External Sources') }}</a>
+										</div>
+										<div class="break-words">
+											<a :href="newExternalHref" target="_blank" class="text-brand-600 hover:underline break-words">{{ __('New External Source') }}</a>
+										</div>
+									</div>
+									<div class="break-words">
+										<a :href="'/app/query-report/AI%20External%20Sources%20Summary'" target="_blank" class="text-brand-600 hover:underline break-words">{{ __('Open External Summary') }}</a>
+									</div>
+								</div>
+							</div>
+							</div>
 					</div>
 				</div>
 			</div>
 		</div>
-	</div>
 </template>
 <script setup>
 import {
-	Breadcrumbs,
-	Button,
-	createResource,
-	FormControl,
-	usePageMeta,
-	toast,
+    Breadcrumbs,
+    Button,
+    call,
+    createResource,
+    FormControl,
+    usePageMeta,
+    toast,
 } from 'frappe-ui'
 import {
-	computed,
-	reactive,
-	onMounted,
-	inject,
-	ref,
-	onBeforeUnmount,
+    computed,
+    reactive,
+    onMounted,
+    inject,
+    ref,
+    onBeforeUnmount,
+    getCurrentInstance,
 } from 'vue'
 import { sessionStore } from '../stores/session'
 import EditorJS from '@editorjs/editorjs'
 import LessonHelp from '@/components/LessonHelp.vue'
-import ChatbotPanel from '@/components/ChatbotPanel.vue'
 import { ChevronRight } from 'lucide-vue-next'
 import { getEditorTools, enablePlyr } from '@/utils'
 import { capture, startRecording, stopRecording } from '@/telemetry'
@@ -116,33 +227,13 @@ const { brand } = sessionStore()
 const editor = ref(null)
 const instructorEditor = ref(null)
 const user = inject('$user')
+const app = getCurrentInstance()
+const { $dialog } = app.appContext.config.globalProperties
 const openInstructorEditor = ref(false)
+const externalAllowedDomains = ref('')
 const { updateOnboardingStep } = useOnboarding('learning')
 let autoSaveInterval
 let showSuccessMessage = false
-
-// Assistant feature flags from settings and per-course
-const assistantSetting = createResource({
-	url: 'lms.lms.api.get_lms_setting',
-	makeParams() {
-		return { field: 'enable_lesson_assistant' }
-	},
-	auto: true,
-})
-const courseAssistant = createResource({
-	url: 'lms.lms.api.is_assistant_enabled',
-	makeParams() {
-		return { course: props.courseName }
-	},
-	auto: true,
-})
-const assistantEnabled = computed(() => {
-	const val = assistantSetting.data
-	const global = val === 1 || val === '1' || val === true || val === 'true'
-	if (!global) return false
-	if (courseAssistant.data === false) return false
-	return true
-})
 
 const props = defineProps({
 	courseName: {
@@ -175,6 +266,7 @@ const renderEditor = (holder) => {
 	return new EditorJS({
 		holder: holder,
 		tools: getEditorTools(true),
+		autofocus: true,
 		defaultBlock: 'markdown',
 		onChange: async (api, event) => {
 			enablePlyr()
@@ -538,15 +630,349 @@ const breadcrumbs = computed(() => {
 })
 
 usePageMeta(() => {
-	return {
-		title: lessonDetails?.data?.lesson
-			? lessonDetails.data.lesson.title
-			: 'New Lesson',
-		icon: brand.favicon,
-	}
+    return {
+        title: lessonDetails?.data?.lesson
+            ? lessonDetails.data.lesson.title
+            : 'New Lesson',
+        icon: brand.favicon,
+    }
 })
+// RAG indexing summary and action for this lesson
+const ragSummary = createResource({
+  url: 'lms.lms.api.get_rag_index_summary',
+  makeParams() {
+    const lessonName = lessonDetails?.data?.lesson?.name
+    return { course: props.courseName, lesson: lessonName }
+  },
+  auto: true,
+})
+
+const attachStatus = createResource({
+  url: 'lms.lms.api.get_lesson_attachment_status',
+  makeParams() {
+    const lessonName = lessonDetails?.data?.lesson?.name
+    return { lesson: lessonName }
+  },
+  auto: true,
+})
+
+// External Sources for this lesson (filter from course sources)
+const externalSources = createResource({
+  url: 'lms.lms.api.get_external_sources',
+  makeParams() {
+    return { course: props.courseName }
+  },
+  auto: true,
+})
+
+const lessonExternalSources = computed(() => {
+  const ln = lessonDetails?.data?.lesson?.name
+  const rows = externalSources.data || []
+  return (rows || []).filter((r) => r.lesson === ln)
+})
+
+const newExternalHref = computed(() => {
+  const ln = lessonDetails?.data?.lesson?.name || ''
+  return `/app/ai-external-source/new?course=${props.courseName || ''}&lesson=${ln}`
+})
+
+const indexLessonExternalJob = createResource({
+  url: 'lms.lms.api.enqueue_external_sources_lesson',
+  makeParams() {
+    return { course: props.courseName, lesson: lessonDetails?.data?.lesson?.name }
+  },
+})
+
+const indexLessonExternalNow = async () => {
+  try {
+    await indexLessonExternalJob.submit()
+    toast.success(__('External sources indexing started'))
+  } catch (e) {
+    toast.error(__('Failed to enqueue external indexing'))
+  }
+}
+
+// Latest drafts (lesson)
+const lastLessonDraft = createResource({
+  url: 'frappe.client.get_list',
+  makeParams() {
+    const lessonName = lessonDetails?.data?.lesson?.name
+    return {
+      doctype: 'AI Lesson Draft',
+      fields: ['name', 'modified'],
+      filters: { lesson: lessonName },
+      order_by: 'modified desc',
+      limit_page_length: 1,
+    }
+  },
+  auto: true,
+})
+
+const lastFaqDraft = createResource({
+  url: 'frappe.client.get_list',
+  makeParams() {
+    const lessonName = lessonDetails?.data?.lesson?.name
+    return {
+      doctype: 'AI FAQ Draft',
+      fields: ['name', 'modified'],
+      filters: { lesson: lessonName },
+      order_by: 'modified desc',
+      limit_page_length: 1,
+    }
+  },
+  auto: true,
+})
+
+// Assistant paused flag (moderators only) and clear action
+const assistantPaused = ref(false)
+const loadAssistantPaused = async () => {
+  try {
+    const res = await call('frappe.client.get_value', {
+      doctype: 'AI Assistant Config',
+      fieldname: 'paused_by_alert',
+      filters: { course: props.courseName },
+    })
+    assistantPaused.value = !!res?.message?.paused_by_alert
+  } catch (e) {
+    assistantPaused.value = false
+  }
+}
+onMounted(() => {
+  loadAssistantPaused()
+  loadAllowedDomains()
+})
+
+const loadAllowedDomains = async () => {
+  try {
+    const res = await call('frappe.client.get_value', {
+      doctype: 'LMS Settings',
+      fieldname: 'assistant_external_allowed_domains',
+    })
+    externalAllowedDomains.value = res?.message?.assistant_external_allowed_domains || ''
+  } catch (e) {
+    externalAllowedDomains.value = ''
+  }
+}
+
+const clearPause = async () => {
+  try {
+    await call('lms.lms.api.clear_assistant_pause', { course: props.courseName })
+    assistantPaused.value = false
+    toast.success(__('Assistant unpaused'))
+  } catch (e) {
+    toast.error(__('Failed to clear pause'))
+  }
+}
+
+const coveragePct = computed(() => {
+  const t = ragSummary.data?.total_chunks || 0
+  const e = ragSummary.data?.embedded_chunks || 0
+  if (!t) return 0
+  return Math.round((e * 100) / t)
+})
+
+const remainingToEmbed = computed(() => {
+  const t = ragSummary.data?.total_chunks || 0
+  const e = ragSummary.data?.embedded_chunks || 0
+  const r = t - e
+  return r > 0 ? r : 0
+})
+
+const indexJob = createResource({
+  url: 'lms.lms.api.enqueue_rag_index_lesson',
+  makeParams() {
+    const lessonName = lessonDetails?.data?.lesson?.name
+    return { lesson: lessonName }
+  },
+})
+
+const indexNow = async () => {
+  try {
+    await indexJob.submit()
+    toast.success(__('Indexing started'))
+    toast.info(__('Track progress in Desk → Reports → AI Embeddings Coverage'))
+  } catch (e) {
+    toast.error(__('Failed to enqueue indexing'))
+  }
+}
+
+const embedJob = createResource({
+  url: 'lms.lms.api.enqueue_rag_embeddings_lesson',
+  makeParams() {
+    const lessonName = lessonDetails?.data?.lesson?.name
+    return { lesson: lessonName }
+  },
+})
+
+const embedNow = async () => {
+  try {
+    await embedJob.submit()
+    toast.success(__('Embeddings job started'))
+    toast.info(__('Track progress in Desk → Reports → AI Embeddings Coverage'))
+  } catch (e) {
+    toast.error(__('Failed to enqueue embeddings job'))
+  }
+}
+
+const rebuildJob = createResource({
+  url: 'lms.lms.api.enqueue_rag_rebuild_lesson',
+  makeParams() {
+    const lessonName = lessonDetails?.data?.lesson?.name
+    return { lesson: lessonName }
+  },
+})
+
+const rebuildNow = async () => {
+  try {
+    await rebuildJob.submit()
+    toast.success(__('Rebuild job started'))
+    toast.info(__('Track progress in Desk → Reports → AI Embeddings Coverage'))
+  } catch (e) {
+    toast.error(__('Failed to enqueue rebuild'))
+  }
+}
+
+// AI Instructor tools
+const quizJob = createResource({
+  url: 'lms.lms.api.generate_quiz_from_lesson',
+  makeParams(values) {
+    return {
+      lesson: lessonDetails?.data?.lesson?.name,
+      num_questions: values?.num_questions || 6,
+      difficulty: values?.difficulty || 'medium',
+    }
+  },
+})
+
+const generateQuiz = async () => {
+  // Open a small params dialog
+  const state = reactive({ num_questions: 6, difficulty: 'medium' })
+  $dialog({
+    title: __('Generate Quiz (AI)'),
+    message: () => {
+      return (
+        `<div class="space-y-2 text-sm">` +
+        `<div>${__('Number of Questions')}</div>` +
+        `<input type="number" min="1" max="20" value="${state.num_questions}" id="ai-num-q" class="border rounded px-2 py-1 w-full" />` +
+        `<div class="mt-2">${__('Difficulty')}</div>` +
+        `<select id="ai-diff" class="border rounded px-2 py-1 w-full">` +
+        `<option value="easy">${__('easy')}</option>` +
+        `<option value="medium" selected>${__('medium')}</option>` +
+        `<option value="hard">${__('hard')}</option>` +
+        `</select>` +
+        `</div>`
+      )
+    },
+    actions: [
+      {
+        label: __('Cancel'),
+      },
+      {
+        label: __('Generate'),
+        variant: 'solid',
+        onClick: async (close) => {
+          try {
+            const nq = parseInt((document.getElementById('ai-num-q') || {}).value || '6')
+            const diff = (document.getElementById('ai-diff') || {}).value || 'medium'
+            const res = await quizJob.submit({ num_questions: nq, difficulty: diff })
+            if (res?.ok) {
+              toast.success(__('Quiz generated'))
+              window.open(`/app/lms-quiz/${res.quiz}`, '_blank')
+              try {
+                const key = `ai_quiz_params:${lessonDetails?.data?.lesson?.name || ''}`
+                localStorage.setItem(key, JSON.stringify({ num_questions: nq, difficulty: diff }))
+              } catch (e) {}
+              close()
+            } else {
+              throw new Error('failed')
+            }
+          } catch (e) {
+            toast.error(__('Failed to generate quiz'))
+          }
+        },
+      },
+    ],
+  })
+}
+
+const hasLastQuizParams = computed(() => {
+  try {
+    const key = `ai_quiz_params:${lessonDetails?.data?.lesson?.name || ''}`
+    return !!localStorage.getItem(key)
+  } catch (e) { return false }
+})
+
+const regenerateQuizLast = async () => {
+  try {
+    const key = `ai_quiz_params:${lessonDetails?.data?.lesson?.name || ''}`
+    const raw = localStorage.getItem(key)
+    const params = raw ? JSON.parse(raw) : { num_questions: 6, difficulty: 'medium' }
+    const res = await quizJob.submit(params)
+    if (res?.ok) {
+      toast.success(__('Quiz generated'))
+      window.open(`/app/lms-quiz/${res.quiz}`, '_blank')
+    } else {
+      throw new Error('failed')
+    }
+  } catch (e) {
+    toast.error(__('Failed to generate quiz'))
+  }
+}
+
+const draftJob = createResource({
+  url: 'lms.lms.api.generate_lesson_draft',
+  makeParams() {
+    return { lesson: lessonDetails?.data?.lesson?.name }
+  },
+})
+
+const generateDraft = async () => {
+  try {
+    const res = await draftJob.submit()
+    if (res?.ok) {
+      toast.success(__('Draft generated'))
+      window.open(`/app/ai-lesson-draft/${res.draft}`, '_blank')
+    } else {
+      throw new Error('failed')
+    }
+  } catch (e) {
+    toast.error(__('Failed to generate draft'))
+  }
+}
+
+const faqJob = createResource({
+  url: 'lms.lms.api.generate_faq_from_transcripts',
+  makeParams() {
+    return { course: props.courseName, lesson: lessonDetails?.data?.lesson?.name, max_pairs: 20 }
+  },
+})
+
+const generateFAQ = async () => {
+  try {
+    const res = await faqJob.submit()
+    if (res?.ok) {
+      toast.success(__('FAQ draft generated'))
+      window.open(`/app/ai-faq-draft/${res.draft}`, '_blank')
+    } else {
+      throw new Error('failed')
+    }
+  } catch (e) {
+    toast.error(__('Failed to generate FAQ'))
+  }
+}
+
 </script>
 <style>
+/* AI sidebar containment and wrapping */
+.ai-sidebar { min-width: 0; }
+.ai-sidebar .sticky { min-width: 0; }
+.ai-sidebar a { overflow-wrap: anywhere; word-break: break-word; }
+.ai-sidebar button, .ai-sidebar .btn, .ai-sidebar .frappe-button {
+  max-width: 100%;
+  white-space: normal;
+  flex-wrap: wrap;
+}
+.ai-sidebar .rounded-md.border, .ai-sidebar .rounded-lg.border { min-width: 0; }
 .embed-tool__caption,
 .cdx-simple-image__caption {
 	display: none;
@@ -749,5 +1175,24 @@ iframe {
 :root {
 	--plyr-range-fill-background: white;
 	--plyr-video-control-background-hover: transparent;
+}
+
+/* Keep AI sidebar content properly scrollable and wrapped */
+.ai-sidebar {
+  min-width: 0;
+}
+.ai-sidebar a {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.ai-sidebar button,
+.ai-sidebar .btn,
+.ai-sidebar .frappe-button {
+  max-width: 100%;
+  white-space: normal;
+  flex-wrap: wrap;
+}
+.ai-sidebar .rounded-md.border {
+  min-width: 0;
 }
 </style>
