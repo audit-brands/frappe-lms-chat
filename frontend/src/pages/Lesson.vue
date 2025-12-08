@@ -261,15 +261,6 @@
 								:quizId="lesson.data.quiz_id"
 							/>
 						</div>
-						<div v-if="assistantEnabled" class="mt-4 px-2">
-							<ChatbotPanel
-								:course="courseName"
-								:chapter="chapterNumber"
-								:lesson="lessonNumber"
-								:lessonTitle="lesson.data?.title"
-								:lessonId="lesson.data?.name"
-							/>
-						</div>
 					</div>
 					<div
 						v-if="lesson.data"
@@ -324,6 +315,15 @@
 					:getProgress="lesson.data.membership ? true : false"
 					:lessonProgress="lessonProgress"
 				/>
+				<div v-if="assistantEnabled" class="border-t p-3">
+					<ChatbotPanel
+						:course="courseName"
+						:chapter="chapterNumber"
+						:lesson="lessonNumber"
+						:lessonTitle="lesson.data?.title"
+						:lessonId="lesson.data?.name"
+					/>
+				</div>
 			</div>
 		</div>
 	</div>
